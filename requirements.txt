@@ -1,8 +1,8 @@
+langchain>=0.2.0
+langchain-openai>=0.1.0
+langchain-community>=0.2.0
+langchain-chroma
 streamlit
 openai
-langchain
-langchain-openai
-langchain-community
-langchain-chroma
 pypdf
 protobuf==4.25.3
