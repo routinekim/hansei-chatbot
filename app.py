@@ -12,7 +12,7 @@ st.title("🏫 한세대학교 규정 안내 챗봇")
 st.markdown("규정집에 대해 궁금한 점을 물어보세요.")
 
 # API 키 및 DB 설정
-os.environ["OPENAI_API_KEY"] = "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"
+os.environ["OPENAI_API_KEY"] = "sk-proj-7Slo88jqTeWEI-l0_EJJHzyjkDaICSYzj01HsJvdPafeeG4k3zHd_WfKUHiofquEBzjO-F5wS4T3BlbkFJHKi_-JYaKChGbhd6q5HcYiL5iO5-8PvifpoJhlx561Ureoh7kajDUQ4hQpRJY1f74FPXOoGmEAsk-proj-YcydfEcnon-pPOlANUM4W5B-u-TvEa6M9qHAIEfGePyWgi8prRwBs3o8Jhdm8rwnf0guRtLA0IT3BlbkFJyM8XRzlLbE46RtQJwuFIr_k4F0hG5o0VYOlZkSyFMZ6xh1QlsNkECNXpqLONcVRKjSbAJl-QAA"
 persist_db = "./db_hansei"
 
 # 데이터베이스 불러오기 (이미 생성된 DB 활용)
