@@ -3,3 +3,4 @@ langchain-openai
 langchain-community
 langchain-chroma
 pypdf
+protobuf==4.25.3
