@@ -7,6 +7,31 @@ from langchain_community.vectorstores import DocArrayInMemorySearch
 # 1. 페이지 설정
 st.set_page_config(page_title="한세대학교 학사 챗봇", page_icon="🎓", layout="wide")
 
+# 2. 삼성 인터넷 대응 커스텀 스타일 (고정 위치 해제 및 강제 노출)
+st.markdown("""
+    <style>
+    /* 하단 고정 바를 해제하고 본문 흐름에 포함 */
+    div[data-testid="stChatInputContainer"] {
+        position: relative !important; 
+        bottom: 0 !important;
+        width: 100% !important;
+        padding: 20px 0 !important;
+        margin-top: 30px !important;
+    }
+    
+    /* 입력창 테두리를 파란색으로 강조하여 눈에 띄게 함 */
+    div[data-testid="stChatInputContainer"] > div {
+        border: 3px solid #007bff !important;
+        border-radius: 15px !important;
+    }
+
+    /* 전체 컨텐츠 하단에 아주 큰 여백을 주어 툴바 위로 올림 */
+    .main .block-container {
+        padding-bottom: 300px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # API 키 설정
 if "OPENAI_API_KEY" in st.secrets:
     os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
@@ -14,23 +39,7 @@ else:
     st.error("API 키 설정이 필요합니다.")
     st.stop()
 
-# 2. 삼성 인터넷 대응 커스텀 스타일 (고정 위치 해제)
-st.markdown("""
-    <style>
-    /* 하단 고정 바를 아예 없애고 일반 요소처럼 취급 */
-    div[data-testid="stChatInputContainer"] {
-        position: static !important; 
-        padding-top: 20px !important;
-        padding-bottom: 100px !important; /* 하단 툴바를 고려한 여유 공간 */
-    }
-    /* 입력창 테두리 시인성 강화 */
-    div[data-testid="stChatInputContainer"] > div {
-        border: 2px solid #007bff !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# 세션 상태 초기화
+# --- 세션 상태 및 로직 ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "retriever" not in st.session_state:
@@ -41,9 +50,8 @@ if "user_type" not in st.session_state:
 # 사이드바 사용설명서
 with st.sidebar:
     st.title("📖 사용설명서")
-    st.info("삼성 인터넷 사용자는 화면 맨 아래로 내려서 질문을 입력하세요.")
+    st.warning("⚠️ 삼성 인터넷 사용자 필독\n질문창이 안 보이면 화면을 끝까지 아래로 내려보세요.")
     current_type = st.session_state.get("user_type", "학부생")
-    st.subheader(f"💡 {current_type} 추천 질문")
     if current_type == "학부생":
         st.caption("• 졸업 요건과 채플 횟수\n• 전과 및 장학금 기준")
     else:
@@ -82,25 +90,22 @@ for message in st.session_state.messages:
 
 # --- [핵심] 질문 입력창 ---
 # 이제 입력창이 하단에 고정되지 않고, 대화가 길어지면 아래로 같이 내려갑니다.
-prompt = st.chat_input(f"[{choice}] 여기에 질문을 입력하고 전송 버튼을 누르세요")
+prompt = st.chat_input(f"[{choice}] 여기에 질문을 입력하세요")
 
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
-    # 화면 갱신을 위해 rerun
-    st.rerun()
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-# 마지막 질문에 대한 답변 생성 로직
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    last_prompt = st.session_state.messages[-1]["content"]
     with st.chat_message("assistant"):
         with st.spinner("학칙 검토 중..."):
             try:
-                relevant_docs = st.session_state.retriever.invoke(last_prompt)
+                relevant_docs = st.session_state.retriever.invoke(prompt)
                 context = "\n".join([d.page_content for d in relevant_docs])
                 llm = ChatOpenAI(model="gpt-4o", temperature=0)
-                full_prompt = f"한세대학교 {choice} 상담원입니다. 학칙에 근거하여 답변하세요.\n\n{context}\n\n질문: {last_prompt}"
+                full_prompt = f"한세대학교 {choice} 상담원입니다. 학칙에 근거하여 답변하세요.\n\n{context}\n\n질문: {prompt}"
                 response = llm.invoke(full_prompt)
+                st.markdown(response.content)
                 st.session_state.messages.append({"role": "assistant", "content": response.content})
-                st.rerun()
             except Exception as e:
                 st.error(f"오류: {e}")
