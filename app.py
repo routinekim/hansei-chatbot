@@ -1,114 +1,86 @@
-import streamlit as st
 import os
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_chroma import Chroma
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain.chains import create_history_aware_retriever, create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
+import sys
+import warnings
 
-# 1. 페이지 설정
-st.set_page_config(page_title="한세대학교 규정 챗봇", page_icon="🏫")
-st.title("🏫 한세대학교 규정 안내 챗봇")
-st.markdown("---")
+# 1. API 키 설정
+os.environ["OPENAI_API_KEY"] = "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"
 
-# 2. 보안 설정 (Streamlit Secrets에서 API 키 로드)
-if "OPENAI_API_KEY" in st.secrets:
-    os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
-else:
-    st.error("❌ Secrets에 OPENAI_API_KEY를 등록해주세요.")
-    st.stop()
+try:
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+    from langchain_community.document_loaders import PyPDFLoader
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_community.vectorstores import DocArrayInMemorySearch
+except ImportError:
+    print("❌ 라이브러리 누락! 터미널 실행: pip install langchain-openai langchain-community pypdf docarray")
+    sys.exit()
 
-# 3. 데이터베이스 및 리트리버 설정 (캐싱 적용)
-@st.cache_resource
-def prepare_rag_system():
-    pdf_path = "한세대규정_전체.pdf" # 깃허브의 PDF 파일명과 동일해야 함
-    
-    if not os.path.exists(pdf_path):
-        st.error(f"❌ '{pdf_path}' 파일을 찾을 수 없습니다.")
-        return None
+warnings.filterwarnings("ignore")
 
-    # PDF 로드 및 정밀 분할 (노트북LM처럼 맥락을 잘 잡기 위해 overlap 확대)
-    loader = PyPDFLoader(pdf_path)
-    docs = loader.load()
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
-    splits = text_splitter.split_documents(docs)
+def start_bot():
+    try:
+        print("\n" + "="*50)
+        print("🎓 한세대학교 학사 행정 지능형 챗봇")
+        print("="*50)
+        
+        # [신규] 사용자 유형 선택 단계
+        print("\n안녕하세요! 본인의 신분을 선택해 주세요.")
+        print("1. 학부생 (학부 학칙 기준)")
+        print("2. 대학원생 (대학원 학칙 기준)")
+        
+        choice = input("\n번호를 입력하세요 (1 또는 2): ").strip()
+        
+        target_file = ""
+        user_type = ""
+        
+        if choice == '1':
+            target_file = "학부학칙.pdf"
+            user_type = "학부생"
+        elif choice == '2':
+            target_file = "대학원학칙.pdf"
+            user_type = "대학원생"
+        else:
+            print("⚠️ 잘못된 입력입니다. 프로그램을 재시작해 주세요.")
+            return
 
-    # 벡터 DB 및 검색기 설정 (k=7로 검색 범위 확장)
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    vectorstore = Chroma.from_documents(documents=splits, embedding=embeddings)
-    return vectorstore.as_retriever(search_kwargs={"k": 7})
+        if not os.path.exists(target_file):
+            print(f"❌ {target_file} 파일이 폴더에 없습니다. 파일명을 확인해 주세요.")
+            return
 
-# 시스템 초기화
-retriever = prepare_rag_system()
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        print(f"\n🚀 {user_type} 맞춤형 학칙 데이터를 로딩 중입니다...")
+        loader = PyPDFLoader(target_file)
+        docs = loader.load()
+        
+        # 검색 엔진 구축
+        db = DocArrayInMemorySearch.from_documents(
+            docs, 
+            OpenAIEmbeddings(model="text-embedding-3-small")
+        )
+        retriever = db.as_retriever()
+        llm = ChatOpenAI(model="gpt-4o", temperature=0)
+        
+        print("\n" + "*"*45)
+        print(f"✅ {user_type}님, 상담 준비가 완료되었습니다!")
+        print("   궁금한 점을 물어보세요 (종료: q)")
+        print("*"*45)
+        
+        while True:
+            q = input("\n질문: ")
+            if q.lower() == 'q': break
+            
+            print("🔍 관련 학칙 검토 중...", end="\r")
+            
+            # 검색 및 답변 생성
+            relevant_docs = retriever.invoke(q)
+            context = "\n".join([d.page_content for d in relevant_docs])
+            
+            # 프롬프트에 사용자 유형 반영
+            prompt = f"당신은 한세대학교 {user_type} 전담 상담원입니다. 다음 학칙을 바탕으로 답변하세요.\n\n내용: {context}\n\n질문: {q}"
+            response = llm.invoke(prompt)
+            
+            print(f"\n[AI 상담원]:\n{response.content}")
 
-# 4. 대화 맥락 유지를 위한 체인 구성
-if retriever:
-    # (A) 질문 재구성 프롬프트: 이전 대화를 참고해 질문을 완전한 문장으로 수정
-    contextualize_q_system_prompt = (
-        "이전 대화 내용과 최신 사용자 질문을 바탕으로, "
-        "대화 맥락을 알 수 있는 독립적인 질문으로 다시 작성하세요."
-    )
-    contextualize_q_prompt = ChatPromptTemplate.from_messages([
-        ("system", contextualize_q_system_prompt),
-        MessagesPlaceholder("chat_history"),
-        ("human", "{input}"),
-    ])
-    
-    history_aware_retriever = create_history_aware_retriever(
-        llm, retriever, contextualize_q_prompt
-    )
+    except Exception as e:
+        print(f"\n❌ 오류가 발생했습니다: {e}")
 
-    # (B) 답변 생성 프롬프트: 규정 전문가 페르소나 부여
-    system_prompt = (
-        "당신은 한세대학교 규정 전문가입니다. "
-        "아래의 문맥(context)을 사용하여 질문에 답변하세요. "
-        "답변 시 반드시 해당 조항과 페이지를 명시하세요. "
-        "민감한 정보(위원 명단 등)에 대해서는 규정에 명시된 공개/비공개 원칙을 철저히 따르세요."
-        "\n\n"
-        "{context}"
-    )
-    qa_prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        MessagesPlaceholder("chat_history"),
-        ("human", "{input}"),
-    ])
-
-    # (C) 전체 RAG 체인 통합
-    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-
-    # 5. 채팅 UI 및 세션 관리
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    # 기존 대화 표시
-    for message in st.session_state.chat_history:
-        role = "user" if isinstance(message, HumanMessage) else "assistant"
-        with st.chat_message(role):
-            st.markdown(message.content)
-
-    # 질문 입력 및 처리
-    if user_input := st.chat_input("규정에 대해 질문하세요..."):
-        with st.chat_message("user"):
-            st.markdown(user_input)
-
-        with st.chat_message("assistant"):
-            with st.spinner("규정집 분석 중..."):
-                result = rag_chain.invoke({
-                    "input": user_input,
-                    "chat_history": st.session_state.chat_history
-                })
-                answer = result["answer"]
-                st.markdown(answer)
-                
-                # 대화 기록 저장 (맥락 유지의 핵심)
-                st.session_state.chat_history.extend([
-                    HumanMessage(content=user_input),
-                    AIMessage(content=answer),
-                ])
+if __name__ == "__main__":
+    start_bot()
