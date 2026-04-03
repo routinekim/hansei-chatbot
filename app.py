@@ -132,4 +132,10 @@ if prompt:
                 # 세션에 저장된 retriever를 안전하게 사용
                 relevant_docs = st.session_state.retriever.invoke(prompt)
                 context = "\n".join([d.page_content for d in relevant_docs])
-                llm = ChatOpenAI(
+                llm = ChatOpenAI(model="gpt-4o", temperature=0)
+                full_prompt = f"당신은 한세대학교 {choice} 상담원입니다. 아래 학칙을 바탕으로 답하세요.\n\n{context}\n\n질문: {prompt}"
+                response = llm.invoke(full_prompt)
+                st.markdown(response.content)
+                st.session_state.messages.append({"role": "assistant", "content": response.content})
+            except Exception as e:
+                st.error(f"오류가 발생했습니다: {e}")
